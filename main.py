@@ -254,15 +254,22 @@ def run_tts(text: str) -> bytes:
 
 @app.post("/ocr")
 async def ocr_api(file: UploadFile = File(...)):
+    return {
+        "success": False,
+        "error": "OCR sementara dinonaktifkan untuk test TTS di Railway."
+    }
+
+"""@app.post("/ocr")
+async def ocr_api(file: UploadFile = File(...)):
     try:
         contents = await file.read()
         pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
         text = ocr_pipeline(pil_img)
         return {"success": True, "text": text, "confidence": ocr_confidence(text) if text.strip() else 0.0}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e)}"""
 
-"""@app.post("/tts")
+@app.post("/tts")
 def tts_api(req: TtsRequest):
     try:
         audio_bytes = run_tts(req.text)
@@ -274,11 +281,11 @@ def tts_api(req: TtsRequest):
             }
         )
     except Exception as e:
-        return {"success": False, "error": str(e)}"""
+        return {"success": False, "error": str(e)}
 
-@app.post("/tts")
+"""@app.post("/tts")
 def tts_api(req: TtsRequest):
     return {
         "success": False,
         "error": "TTS sementara dinonaktifkan di server Railway agar OCR lebih stabil."
-    }
+    }"""
