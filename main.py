@@ -262,7 +262,7 @@ async def ocr_api(file: UploadFile = File(...)):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-@app.post("/tts")
+"""@app.post("/tts")
 def tts_api(req: TtsRequest):
     try:
         audio_bytes = run_tts(req.text)
@@ -274,4 +274,11 @@ def tts_api(req: TtsRequest):
             }
         )
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e)}"""
+
+@app.post("/tts")
+def tts_api(req: TtsRequest):
+    return {
+        "success": False,
+        "error": "TTS sementara dinonaktifkan di server Railway agar OCR lebih stabil."
+    }
