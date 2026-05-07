@@ -10,3 +10,4 @@ scikit-fuzzy
 soundfile
 torch
 sentencepiece
+scipy==1.13.1
