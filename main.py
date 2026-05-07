@@ -283,9 +283,3 @@ def tts_api(req: TtsRequest):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-"""@app.post("/tts")
-def tts_api(req: TtsRequest):
-    return {
-        "success": False,
-        "error": "TTS sementara dinonaktifkan di server Railway agar OCR lebih stabil."
-    }"""
