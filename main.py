@@ -259,15 +259,6 @@ async def ocr_api(file: UploadFile = File(...)):
         "error": "OCR sementara dinonaktifkan untuk test TTS di Railway."
     }
 
-"""@app.post("/ocr")
-async def ocr_api(file: UploadFile = File(...)):
-    try:
-        contents = await file.read()
-        pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
-        text = ocr_pipeline(pil_img)
-        return {"success": True, "text": text, "confidence": ocr_confidence(text) if text.strip() else 0.0}
-    except Exception as e:
-        return {"success": False, "error": str(e)}"""
 
 @app.post("/tts")
 def tts_api(req: TtsRequest):
