@@ -149,23 +149,21 @@ def clean_line(text: str) -> str:
 def prepare_line_for_trocr(line_img: Image.Image) -> Image.Image:
     line_img = line_img.convert("RGB")
 
-    target_w = 384
-    target_h = 384
-
+    target_size = (384, 384)
     w, h = line_img.size
 
-    if w == 0 or h == 0:
-        return Image.new("RGB", (target_w, target_h), "white")
+    if w <= 0 or h <= 0:
+        return Image.new("RGB", target_size, "white")
 
-    scale = min(target_w / w, target_h / h)
+    scale = min(target_size[0] / w, target_size[1] / h)
     new_w = max(1, int(w * scale))
     new_h = max(1, int(h * scale))
 
-    resized = line_img.resize((new_w, new_h))
+    resized = line_img.resize((new_w, new_h), Image.BICUBIC)
 
-    canvas = Image.new("RGB", (target_w, target_h), "white")
-    x = (target_w - new_w) // 2
-    y = (target_h - new_h) // 2
+    canvas = Image.new("RGB", target_size, "white")
+    x = (target_size[0] - new_w) // 2
+    y = (target_size[1] - new_h) // 2
     canvas.paste(resized, (x, y))
 
     return canvas
@@ -183,21 +181,23 @@ def ocr_pipeline(pil_img: Image.Image) -> str:
     for line_img in lines:
         line_ready = prepare_line_for_trocr(line_img)
 
-        pixel_values = ocr_processor(
-            images=line_ready,
+        image_inputs = ocr_processor.image_processor(
+            images=[line_ready],
             return_tensors="pt",
-        ).pixel_values.to(device_ocr)
+        )
+
+        pixel_values = image_inputs.pixel_values.to(device_ocr)
 
         with torch.no_grad():
             ids = ocr_model.generate(
-                pixel_values,
+                pixel_values=pixel_values,
                 max_length=128,
                 num_beams=5,
                 early_stopping=True,
                 no_repeat_ngram_size=2,
             )
 
-        text = ocr_processor.batch_decode(
+        text = ocr_processor.tokenizer.batch_decode(
             ids,
             skip_special_tokens=True,
         )[0]
