@@ -207,19 +207,38 @@ def ocr_pipeline(pil_img: Image.Image) -> str:
     texts = []
 
     for line_img in lines:
-        line_ready = prepare_line_for_trocr(line_img)
-        pixel_values = pil_to_trocr_tensor(line_ready, device_ocr)
+        w, h = line_img.size
+        line_resized = line_img.resize((int(w * 2.0), int(h * 2.0)))
 
-        with torch.no_grad():
-            ids = ocr_model.generate(
-                pixel_values=pixel_values,
-                max_length=128,
-                num_beams=5,
-                early_stopping=True,
-                no_repeat_ngram_size=2,
-            )
+        try:
+            inputs = ocr_processor(
+                images=line_resized,
+                return_tensors="pt",
+            ).to(device_ocr)
 
-        text = ocr_processor.tokenizer.batch_decode(
+            with torch.no_grad():
+                ids = ocr_model.generate(
+                    **inputs,
+                    max_length=128,
+                    num_beams=5,
+                    early_stopping=True,
+                    no_repeat_ngram_size=2,
+                )
+
+        except Exception:
+            line_ready = prepare_line_for_trocr(line_img)
+            pixel_values = pil_to_trocr_tensor(line_ready, device_ocr)
+
+            with torch.no_grad():
+                ids = ocr_model.generate(
+                    pixel_values=pixel_values,
+                    max_length=128,
+                    num_beams=5,
+                    early_stopping=True,
+                    no_repeat_ngram_size=2,
+                )
+
+        text = ocr_processor.batch_decode(
             ids,
             skip_special_tokens=True,
         )[0]
