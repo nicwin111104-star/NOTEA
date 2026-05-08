@@ -2,11 +2,11 @@ fastapi
 uvicorn[standard]
 python-multipart
 edge-tts
-transformers
+transformers==4.41.2
 pillow
 opencv-python-headless
 numpy
 rapidfuzz
 scikit-fuzzy
-torch==2.2.2+cpu
+torch==2.2.2
 scipy
