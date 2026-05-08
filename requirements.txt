@@ -5,7 +5,7 @@ edge-tts
 transformers==4.41.2
 pillow
 opencv-python-headless
-numpy
+numpy<2
 rapidfuzz
 scikit-fuzzy
 torch==2.2.2
