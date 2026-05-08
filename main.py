@@ -53,6 +53,7 @@ def health():
     return {
         "success": True,
         "status": "ok",
+        "version": "ocr-image-processor-v2",
         "ocr_model": OCR_MODEL_NAME,
         "tts": "edge-tts",
     }
