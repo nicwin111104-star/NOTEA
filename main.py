@@ -162,6 +162,7 @@ def ocr_pipeline(pil_img: Image.Image) -> str:
         inputs = ocr_processor(
             images=line_resized,
             return_tensors="pt",
+            padding=True,
         ).to(device_ocr)
 
         with torch.no_grad():
