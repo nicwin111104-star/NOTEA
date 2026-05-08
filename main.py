@@ -54,7 +54,7 @@ def health():
     return {
         "success": True,
         "status": "ok",
-        "version": "manual-trocr-tensor-v3",
+        "version": "notebook-pipeline-v4",
         "ocr_model": OCR_MODEL_NAME,
         "tts": "edge-tts",
     }
