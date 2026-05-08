@@ -1,15 +1,4 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-
 fastapi
 uvicorn[standard]
 python-multipart
-transformers
-pillow
-opencv-python-headless
-numpy
-rapidfuzz
-scikit-fuzzy
-soundfile
-torch==2.2.2+cpu
-sentencepiece
-scipy
+edge-tts
