@@ -13,7 +13,7 @@ import torch
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from PIL import Image
+from PIL import Image, ImageOps, ImageEnhance
 from pydantic import BaseModel
 from rapidfuzz import process
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
@@ -21,7 +21,7 @@ from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 app = FastAPI(
     title="Notea API",
     description="OCR TrOCR + Edge TTS",
-    version="1.0.0",
+    version="1.0.2",
 )
 
 app.add_middleware(
@@ -44,6 +44,7 @@ def root():
     return {
         "success": True,
         "message": "Notea API running",
+        "version": "manual-trocr-tensor-v3",
         "endpoints": ["/health", "/ocr", "/tts"],
     }
 
@@ -53,7 +54,7 @@ def health():
     return {
         "success": True,
         "status": "ok",
-        "version": "ocr-image-processor-v2",
+        "version": "manual-trocr-tensor-v3",
         "ocr_model": OCR_MODEL_NAME,
         "tts": "edge-tts",
     }
@@ -79,6 +80,12 @@ def auto_crop_gray(gray_img: np.ndarray):
     y1, y2 = ys.min(), ys.max()
     x1, x2 = xs.min(), xs.max()
 
+    pad = 8
+    y1 = max(0, y1 - pad)
+    x1 = max(0, x1 - pad)
+    y2 = min(gray_img.shape[0] - 1, y2 + pad)
+    x2 = min(gray_img.shape[1] - 1, x2 + pad)
+
     return gray_img[y1:y2 + 1, x1:x2 + 1]
 
 
@@ -88,8 +95,8 @@ def split_lines(gray_img: np.ndarray):
     _, th = cv2.threshold(gray_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     th_inv = 255 - th
 
-    kernel_width = max(1, int(w_img * 0.8))
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_width, 1))
+    kernel_width = max(1, int(w_img * 0.75))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_width, 2))
 
     connected = cv2.morphologyEx(th_inv, cv2.MORPH_CLOSE, kernel, iterations=1)
     contours, _ = cv2.findContours(
@@ -107,7 +114,11 @@ def split_lines(gray_img: np.ndarray):
         if h < min_h:
             continue
 
-        roi = gray_img[y:y + h, :]
+        pad_y = max(4, int(h * 0.25))
+        y1 = max(0, y - pad_y)
+        y2 = min(h_img, y + h + pad_y)
+
+        roi = gray_img[y1:y2, :]
         line_imgs.append((y, Image.fromarray(roi).convert("RGB")))
 
     line_imgs = [img for y, img in sorted(line_imgs, key=lambda z: z[0])]
@@ -126,7 +137,6 @@ def clean_line(text: str) -> str:
     t = re.sub(r"^#\s*", "", t)
 
     m = re.match(r"^([A-Za-z])\s+(.+)$", t)
-
     if m and len(m.group(2)) >= 5:
         t = m.group(2)
 
@@ -150,24 +160,41 @@ def clean_line(text: str) -> str:
 def prepare_line_for_trocr(line_img: Image.Image) -> Image.Image:
     line_img = line_img.convert("RGB")
 
-    target_size = (384, 384)
+    line_img = ImageOps.autocontrast(line_img)
+    line_img = ImageEnhance.Contrast(line_img).enhance(1.35)
+    line_img = ImageEnhance.Sharpness(line_img).enhance(1.25)
+
+    target_w = 384
+    target_h = 384
+
     w, h = line_img.size
-
     if w <= 0 or h <= 0:
-        return Image.new("RGB", target_size, "white")
+        return Image.new("RGB", (target_w, target_h), "white")
 
-    scale = min(target_size[0] / w, target_size[1] / h)
+    scale = min((target_w - 24) / w, (target_h - 24) / h)
     new_w = max(1, int(w * scale))
     new_h = max(1, int(h * scale))
 
     resized = line_img.resize((new_w, new_h), Image.BICUBIC)
 
-    canvas = Image.new("RGB", target_size, "white")
-    x = (target_size[0] - new_w) // 2
-    y = (target_size[1] - new_h) // 2
+    canvas = Image.new("RGB", (target_w, target_h), "white")
+    x = (target_w - new_w) // 2
+    y = (target_h - new_h) // 2
     canvas.paste(resized, (x, y))
 
     return canvas
+
+
+def pil_to_trocr_tensor(img: Image.Image, device: str):
+    img = img.convert("RGB").resize((384, 384), Image.BICUBIC)
+
+    arr = np.asarray(img).astype(np.float32) / 255.0
+
+    arr = (arr - 0.5) / 0.5
+    arr = np.transpose(arr, (2, 0, 1))
+
+    tensor = torch.tensor(arr, dtype=torch.float32).unsqueeze(0).to(device)
+    return tensor
 
 
 def ocr_pipeline(pil_img: Image.Image) -> str:
@@ -181,13 +208,7 @@ def ocr_pipeline(pil_img: Image.Image) -> str:
 
     for line_img in lines:
         line_ready = prepare_line_for_trocr(line_img)
-
-        image_inputs = ocr_processor.image_processor(
-            images=[line_ready],
-            return_tensors="pt",
-        )
-
-        pixel_values = image_inputs.pixel_values.to(device_ocr)
+        pixel_values = pil_to_trocr_tensor(line_ready, device_ocr)
 
         with torch.no_grad():
             ids = ocr_model.generate(
@@ -214,6 +235,7 @@ def ocr_pipeline(pil_img: Image.Image) -> str:
             lines_clean[0] = m.group(1)
 
     return "\n".join(lines_clean).strip()
+
 
 VOCAB = [
     "hello", "hi", "hey", "good", "morning", "afternoon", "evening", "night",
@@ -298,10 +320,7 @@ async def ocr_api(file: UploadFile = File(...)):
     try:
         contents = await file.read()
 
-        pil_img = Image.open(
-            io.BytesIO(contents)
-        ).convert("RGB")
-
+        pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
         text = ocr_pipeline(pil_img)
 
         return {
@@ -328,10 +347,7 @@ async def tts_api(req: TtsRequest):
                 "error": "Text kosong.",
             }
 
-        output_path = os.path.join(
-            tempfile.gettempdir(),
-            "tts_output.mp3",
-        )
+        output_path = os.path.join(tempfile.gettempdir(), "tts_output.mp3")
 
         communicate = edge_tts.Communicate(
             text,
