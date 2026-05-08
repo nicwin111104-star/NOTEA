@@ -146,6 +146,31 @@ def clean_line(text: str) -> str:
     return t.strip(" ,")
 
 
+def prepare_line_for_trocr(line_img: Image.Image) -> Image.Image:
+    line_img = line_img.convert("RGB")
+
+    target_w = 384
+    target_h = 384
+
+    w, h = line_img.size
+
+    if w == 0 or h == 0:
+        return Image.new("RGB", (target_w, target_h), "white")
+
+    scale = min(target_w / w, target_h / h)
+    new_w = max(1, int(w * scale))
+    new_h = max(1, int(h * scale))
+
+    resized = line_img.resize((new_w, new_h))
+
+    canvas = Image.new("RGB", (target_w, target_h), "white")
+    x = (target_w - new_w) // 2
+    y = (target_h - new_h) // 2
+    canvas.paste(resized, (x, y))
+
+    return canvas
+
+
 def ocr_pipeline(pil_img: Image.Image) -> str:
     ocr_processor, ocr_model, device_ocr = get_ocr_components()
 
@@ -156,18 +181,16 @@ def ocr_pipeline(pil_img: Image.Image) -> str:
     texts = []
 
     for line_img in lines:
-        width, height = line_img.size
-        line_resized = line_img.resize((int(width * 2.0), int(height * 2.0)))
+        line_ready = prepare_line_for_trocr(line_img)
 
-        inputs = ocr_processor(
-            images=line_resized,
+        pixel_values = ocr_processor(
+            images=line_ready,
             return_tensors="pt",
-            padding=True,
-        ).to(device_ocr)
+        ).pixel_values.to(device_ocr)
 
         with torch.no_grad():
             ids = ocr_model.generate(
-                **inputs,
+                pixel_values,
                 max_length=128,
                 num_beams=5,
                 early_stopping=True,
@@ -186,12 +209,10 @@ def ocr_pipeline(pil_img: Image.Image) -> str:
 
     if lines_clean:
         m = re.match(r"^[aA]\s+([A-Z].+)", lines_clean[0])
-
         if m:
             lines_clean[0] = m.group(1)
 
     return "\n".join(lines_clean).strip()
-
 
 VOCAB = [
     "hello", "hi", "hey", "good", "morning", "afternoon", "evening", "night",
